@@ -10,6 +10,10 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 def get_db():
+    """
+    Dependency to get a database session.
+    Yields a SQLAlchemy session and closes it after the request is finished.
+    """
     db = SessionLocal()
     try:
         yield db
@@ -18,6 +22,9 @@ def get_db():
 
 @router.get("/")
 async def dashboard(request: Request):
+    """
+    Renders the main dashboard HTML template.
+    """
     return templates.TemplateResponse("index.html", {"request": request})
 
 @router.get("/api/transactions")
@@ -28,6 +35,19 @@ async def get_transactions(
     reject_code: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    """
+    Fetches transaction data for the time series chart.
+    
+    Args:
+        start_time: Filter by start timestamp (ISO format).
+        end_time: Filter by end timestamp (ISO format).
+        card_scheme: Filter by card scheme (e.g., 'Visa', 'MasterCard').
+        reject_code: Filter by reject code (e.g., '0000').
+        db: Database session.
+        
+    Returns:
+        List of dictionaries containing 'x' (timestamp) and 'y' (count) for the chart.
+    """
     query = db.query(
         Transaction.timestamp,
         func.count(Transaction.id).label("count")
@@ -58,6 +78,12 @@ async def get_transactions(
 
 @router.get("/api/stats")
 async def get_stats(db: Session = Depends(get_db)):
+    """
+    Fetches high-level statistics for the dashboard cards.
+    
+    Returns:
+        Dictionary containing total and approved counts for Visa and MasterCard.
+    """
     # Total transactions per scheme
     total_visa = db.query(func.count(Transaction.id)).filter(Transaction.card_scheme == "Visa").scalar()
     total_mastercard = db.query(func.count(Transaction.id)).filter(Transaction.card_scheme == "MasterCard").scalar()
@@ -85,5 +111,11 @@ async def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/api/reject_codes")
 async def get_reject_codes(db: Session = Depends(get_db)):
+    """
+    Fetches distinct reject codes and their descriptions for the filter dropdown.
+    
+    Returns:
+        List of dictionaries containing 'code' and 'description'.
+    """
     codes = db.query(Transaction.reject_code, Transaction.reject_description).distinct().all()
     return [{"code": code, "description": desc} for code, desc in codes]
