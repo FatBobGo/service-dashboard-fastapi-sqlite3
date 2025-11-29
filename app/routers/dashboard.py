@@ -25,6 +25,7 @@ async def get_transactions(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     card_scheme: Optional[str] = None,
+    reject_code: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(
@@ -35,14 +36,15 @@ async def get_transactions(
     if card_scheme and card_scheme != "All":
         query = query.filter(Transaction.card_scheme == card_scheme)
     
+    if reject_code and reject_code != "All":
+        query = query.filter(Transaction.reject_code == reject_code)
+    
     if start_time:
         query = query.filter(Transaction.timestamp >= datetime.fromisoformat(start_time))
     if end_time:
         query = query.filter(Transaction.timestamp <= datetime.fromisoformat(end_time))
 
     # Group by minute for the chart
-    # SQLite doesn't have a simple date_trunc, so we'll format the timestamp
-    # This is a simplification; for high volume, we might need better aggregation
     results = query.group_by(func.strftime("%Y-%m-%d %H:%M", Transaction.timestamp)).all()
     
     data = []
@@ -53,3 +55,35 @@ async def get_transactions(
         })
         
     return data
+
+@router.get("/api/stats")
+async def get_stats(db: Session = Depends(get_db)):
+    # Total transactions per scheme
+    total_visa = db.query(func.count(Transaction.id)).filter(Transaction.card_scheme == "Visa").scalar()
+    total_mastercard = db.query(func.count(Transaction.id)).filter(Transaction.card_scheme == "MasterCard").scalar()
+    
+    # Approved transactions (reject_code = '0000')
+    approved_visa = db.query(func.count(Transaction.id)).filter(
+        Transaction.card_scheme == "Visa", 
+        Transaction.reject_code == "0000"
+    ).scalar()
+    approved_mastercard = db.query(func.count(Transaction.id)).filter(
+        Transaction.card_scheme == "MasterCard", 
+        Transaction.reject_code == "0000"
+    ).scalar()
+    
+    return {
+        "visa": {
+            "total": total_visa or 0,
+            "approved": approved_visa or 0
+        },
+        "mastercard": {
+            "total": total_mastercard or 0,
+            "approved": approved_mastercard or 0
+        }
+    }
+
+@router.get("/api/reject_codes")
+async def get_reject_codes(db: Session = Depends(get_db)):
+    codes = db.query(Transaction.reject_code, Transaction.reject_description).distinct().all()
+    return [{"code": code, "description": desc} for code, desc in codes]
