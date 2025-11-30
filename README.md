@@ -14,7 +14,13 @@ A transaction monitoring dashboard built with FastAPI and SQLite.
     uv sync
     ```
 
-3.  **Run the application**:
+3.  **Setup Environment**:
+    Create a `.env` file in the root directory:
+    ```bash
+    echo "DATABASE_URL=sqlite:///./sql_app.db" > .env
+    ```
+
+4.  **Run the application**:
     ```bash
     uv run uvicorn app.main:app --reload
     ```
